@@ -105,8 +105,11 @@ export default function App() {
   const [uploadedDatasets, setUploadedDatasets] = useState([])
   const [selectedDatasetId, setSelectedDatasetId] = useState('')
   const [isUploadDragOver, setIsUploadDragOver] = useState(false)
-  const [themePreference, setThemePreference] = useState(() => localStorage.getItem('themePreference') || 'system')
-  const [resolvedTheme, setResolvedTheme] = useState('light')
+  const [themePreference, setThemePreference] = useState(() => {
+    const saved = localStorage.getItem('themePreference')
+    return saved === 'classic' || saved === 'green' ? saved : 'classic'
+  })
+  const [resolvedTheme, setResolvedTheme] = useState('classic')
   const uploadInputRef = useRef(null)
 
   const [loadInfo, setLoadInfo] = useState(null)
@@ -131,8 +134,8 @@ export default function App() {
   const [error, setError] = useState('')
   const reportRef = useRef(null)
   const trainedReportRef = useRef(null)
-  const chartColors = resolvedTheme === 'dark'
-    ? { grid: '#2f4961aa', axis: '#8ab8dc', text: '#d6ebff' }
+  const chartColors = resolvedTheme === 'green'
+    ? { grid: '#bcd7cd', axis: '#3f6a5a', text: '#214437' }
     : { grid: '#c8d8ec', axis: '#5f7ea4', text: '#2f4e72' }
 
   const classCountRows = useMemo(() => {
@@ -167,8 +170,8 @@ export default function App() {
       .slice(0, 3)
 
     const distText = distribution.length > 0
-      ? distribution.map((row) => `${row.label} (${Number(row.count || 0).toLocaleString()})`).join(', ')
-      : 'No strong class concentration detected in current summary.'
+      ? distribution.map((row) => `${row.label}`).join(', ')
+      : 'no strong class concentration detected'
 
     const corr = trainInfo?.summary?.correlation || []
     const churnPairs = corr.filter((row) => {
@@ -183,37 +186,88 @@ export default function App() {
       .filter((row) => Number(row.value) > 0)
       .sort((a, b) => Number(b.value) - Number(a.value))[0]
 
-    const churnInsight = strongestNegative
-      ? `${strongestNegative.x} vs ${strongestNegative.y} (${Number(strongestNegative.value).toFixed(2)}) shows strongest negative association.`
-      : 'No strong negative churn correlation found in current snapshot.'
-    const churnRisk = strongestPositive
-      ? `${strongestPositive.x} vs ${strongestPositive.y} (${Number(strongestPositive.value).toFixed(2)}) is the strongest positive risk signal.`
-      : 'No strong positive churn correlation found in current snapshot.'
+    const strongestNegativeText = strongestNegative
+      ? `${strongestNegative.x} vs ${strongestNegative.y} (${Number(strongestNegative.value).toFixed(2)})`
+      : 'no strong negative churn correlation'
 
-    const strengths = []
-    if (trainInfo?.classification?.accuracy != null) {
-      strengths.push(`Classification model accuracy is ${(Number(trainInfo.classification.accuracy) * 100).toFixed(2)}%.`)
-    }
-    if (trainInfo?.regression?.r2 != null) {
-      strengths.push(`Regression fit (R2) is ${Number(trainInfo.regression.r2).toFixed(3)} with MAE ${Number(trainInfo.regression.mae).toFixed(3)}.`)
-    }
-    if (strengths.length === 0) strengths.push('Model outputs are available and can support segment-level actions.')
+    const strengths = [
+      `Large concentration in ${distText} creates scale for conversion and upsell programs, improving premium revenue growth.`,
+      'Clear churn/engagement drivers enable targeted offers that protect retention and lift repeat purchases.',
+      'Segment-level targeting supports more efficient campaign spend and better ROI.',
+    ]
+
+    const weaknesses = [
+      'Customer mix remains concentrated in lower tiers, which limits premium revenue share.',
+      'Class-level prediction imbalance can cause uneven campaign targeting and wasted spend.',
+      `Churn sensitivity is concentrated around ${strongestNegativeText}, meaning other drivers may be under-captured.`,
+    ]
+
+    const suggestions = [
+      'Build weekly churn watchlists and run proactive save campaigns for high-risk cohorts.',
+      'Prioritize low wallet-point and low transaction-value customers with targeted booster offers.',
+      'Run A/B tests by segment on offer type, channel, and timing to improve conversion yield.',
+    ]
+
+    const development = [
+      'Design tier-up journeys from entry segments to premium segments using staged rewards.',
+      'Add richer behavioral features (recency, frequency, response history) to improve model lift.',
+      'Set drift monitoring and retraining cadence to keep targeting quality stable over time.',
+    ]
+
+    const growthActions = [
+      'Higher premium revenue from focused tier-up of No Membership and Basic Membership.',
+      'Lower churn by targeting low points_in_wallet customers with retention offers.',
+      'Higher monthly revenue per user by lifting low avg_transaction_value segments.',
+      'Better recurring revenue protection through weekly high-risk customer save lists.',
+      'Higher campaign ROI via monthly KPI-led budget reallocation to best-performing segments.',
+    ]
+
+    const totalCustomers = loadInfo?.rows ?? null
+    const totalClassCount = classDistributionRows.reduce((sum, row) => sum + Number(row.count || 0), 0)
+    const topSegment = distribution[0]?.label ? String(distribution[0].label) : 'n/a'
+    const topShare = totalClassCount > 0
+      ? `${((Number(distribution[0]?.count || 0) / totalClassCount) * 100).toFixed(1)}%`
+      : 'n/a'
+    const top2Share = totalClassCount > 0
+      ? `${((Number(distribution[0]?.count || 0) + Number(distribution[1]?.count || 0)) / totalClassCount * 100).toFixed(1)}%`
+      : 'n/a'
+    const premiumKeywords = ['gold', 'platinum', 'premium', 'silver']
+    const baseKeywords = ['no membership', 'basic', 'entry', 'free']
+    const premiumCount = classDistributionRows
+      .filter((row) => premiumKeywords.some((k) => String(row.label || '').toLowerCase().includes(k)))
+      .reduce((sum, row) => sum + Number(row.count || 0), 0)
+    const baseCount = classDistributionRows
+      .filter((row) => baseKeywords.some((k) => String(row.label || '').toLowerCase().includes(k)))
+      .reduce((sum, row) => sum + Number(row.count || 0), 0)
+    const premiumShare = totalClassCount > 0 ? `${((premiumCount / totalClassCount) * 100).toFixed(1)}%` : 'n/a'
+    const baseShare = totalClassCount > 0 ? `${((baseCount / totalClassCount) * 100).toFixed(1)}%` : 'n/a'
+    const kpis = [
+      `Total customers: ${totalCustomers != null ? Number(totalCustomers).toLocaleString() : 'n/a'}`,
+      `Top segment share: ${topSegment} (${topShare})`,
+      `Top 2 segments share: ${top2Share}`,
+      `Premium-tier share: ${premiumShare}`,
+      `Base-tier share: ${baseShare}`,
+    ]
+    const modelKpis = [
+      `Targeting accuracy: ${trainInfo?.classification?.accuracy != null ? `${(Number(trainInfo.classification.accuracy) * 100).toFixed(2)}%` : 'n/a'}`,
+      `Mean F1 score: ${trainInfo?.classification?.mean_f1 != null ? Number(trainInfo.classification.mean_f1).toFixed(3) : 'n/a'}`,
+      `Forecast R2: ${trainInfo?.regression?.r2 != null ? Number(trainInfo.regression.r2).toFixed(3) : 'n/a'}`,
+      `Forecast MAE: ${trainInfo?.regression?.mae != null ? Number(trainInfo.regression.mae).toFixed(3) : 'n/a'}`,
+    ]
 
     return {
-      implementation: `Primary customer concentration is in: ${distText}. Prioritize conversion journeys from largest groups to higher-value tiers.`,
-      churn: `${churnInsight} ${churnRisk}`,
+      narrative:
+        `Current business picture shows concentration in key membership bands (${distText}) with actionable churn signals for targeted growth. ` +
+        `Top risk-related relationship is ${strongestNegativeText}, which supports focused retention actions while scaling tier-up conversion programs.`,
       strengths,
-      development: [
-        'Increase progression from entry-level segments into premium segments using staged offers.',
-        'Monitor segments with weaker prediction confidence and retrain on newer cohorts.',
-      ],
-      suggestions: [
-        'Create churn watchlists using correlation-linked drivers and run targeted retention campaigns.',
-        'Track conversion, retention, and average value by segment every month.',
-        'Run A/B tests for offer type and communication channel by membership segment.',
-      ],
+      weaknesses,
+      suggestions,
+      development,
+      growthActions,
+      kpis,
+      modelKpis,
     }
-  }, [classDistributionRows, trainInfo])
+  }, [classDistributionRows, loadInfo, trainInfo])
 
   const classColor = (label) => {
     const v = String(label || '').trim().toLowerCase()
@@ -371,17 +425,10 @@ export default function App() {
   }, [trainInfo?.regression?.form_schema])
 
   useEffect(() => {
-    const media = window.matchMedia('(prefers-color-scheme: dark)')
-    const applyTheme = () => {
-      const next = themePreference === 'system' ? (media.matches ? 'dark' : 'light') : themePreference
-      document.documentElement.setAttribute('data-theme', next)
-      setResolvedTheme(next)
-    }
-
-    applyTheme()
-    localStorage.setItem('themePreference', themePreference)
-    media.addEventListener('change', applyTheme)
-    return () => media.removeEventListener('change', applyTheme)
+    const next = themePreference || 'classic'
+    document.documentElement.setAttribute('data-theme', next)
+    setResolvedTheme(next)
+    localStorage.setItem('themePreference', next)
   }, [themePreference])
 
   useEffect(() => {
@@ -500,7 +547,7 @@ export default function App() {
       const canvas = await html2canvas(trainedReportRef.current, {
         scale: 2,
         useCORS: true,
-        backgroundColor: resolvedTheme === 'dark' ? '#0d1a2b' : '#f2f5fb',
+        backgroundColor: resolvedTheme === 'green' ? '#eef5f2' : '#f2f5fb',
         windowWidth: trainedReportRef.current.scrollWidth,
         windowHeight: trainedReportRef.current.scrollHeight,
       })
@@ -528,7 +575,7 @@ export default function App() {
       const canvas = await html2canvas(trainedReportRef.current, {
         scale: 2,
         useCORS: true,
-        backgroundColor: resolvedTheme === 'dark' ? '#0d1a2b' : '#f2f5fb',
+        backgroundColor: resolvedTheme === 'green' ? '#eef5f2' : '#f2f5fb',
         windowWidth: trainedReportRef.current.scrollWidth,
         windowHeight: trainedReportRef.current.scrollHeight,
       })
@@ -650,9 +697,9 @@ export default function App() {
 
       <div className="container" ref={reportRef}>
         <header className="hero">
-          <div>
-            <p className="eyebrow">Customer Intelligence Platform</p>
-            <h1>Interactive ML Dashboard</h1>
+          <div className="hero-title">
+            <h1>NOVASIGHT</h1>
+            <p className="eyebrow">The Intelligence Studio</p>
             <p className="hero-copy">
               Load your dataset, train classification and regression models, and inspect quality metrics in one
               professional workspace.
@@ -669,9 +716,8 @@ export default function App() {
                 value={themePreference}
                 onChange={(e) => setThemePreference(e.target.value)}
               >
-                <option value="system">System</option>
-                <option value="light">Light</option>
-                <option value="dark">Dark</option>
+                <option value="classic">Executive Ivory</option>
+                <option value="green">Green Finance</option>
               </select>
             </div>
           </div>
@@ -875,7 +921,7 @@ export default function App() {
                 <div className="input-row">
                   <label>Classification model</label>
                   <select
-                    value={classModel}
+                    value={autoSelectBestModels && trainInfo?.classification?.model_name ? trainInfo.classification.model_name : classModel}
                     onChange={(e) => setClassModel(e.target.value)}
                     disabled={!canTrainClassification || trainMode === 'regression' || autoSelectBestModels}
                   >
@@ -899,7 +945,7 @@ export default function App() {
                 <div className="input-row">
                   <label>Regression model</label>
                   <select
-                    value={regModel}
+                    value={autoSelectBestModels && trainInfo?.regression?.model_name ? trainInfo.regression.model_name : regModel}
                     onChange={(e) => setRegModel(e.target.value)}
                     disabled={!canTrainRegression || trainMode === 'classification' || autoSelectBestModels}
                   >
@@ -1321,30 +1367,50 @@ export default function App() {
                     <p>Auto-generated interpretation of current model outputs for leadership decisions.</p>
                   </div>
                   <div className="narrative-grid">
-                    <article className="narrative-card">
-                      <h4>Product Implementation</h4>
-                      <p>{executiveNarrative.implementation}</p>
-                    </article>
-                    <article className="narrative-card">
-                      <h4>Churn Insights</h4>
-                      <p>{executiveNarrative.churn}</p>
+                    <article className="narrative-card span-full">
+                      <h4>Executive Narrative</h4>
+                      <p>{executiveNarrative.narrative}</p>
                     </article>
                     <article className="narrative-card">
                       <h4>Strengths</h4>
                       {executiveNarrative.strengths.map((line, idx) => (
-                        <p key={`strength-${idx}`}>{line}</p>
+                        <p key={`strength-${idx}`}>- {line}</p>
                       ))}
                     </article>
                     <article className="narrative-card">
-                      <h4>Areas for Development</h4>
-                      {executiveNarrative.development.map((line, idx) => (
-                        <p key={`dev-${idx}`}>{line}</p>
+                      <h4>Weaknesses</h4>
+                      {executiveNarrative.weaknesses.map((line, idx) => (
+                        <p key={`weak-${idx}`}>- {line}</p>
                       ))}
                     </article>
                     <article className="narrative-card">
                       <h4>Suggestions</h4>
                       {executiveNarrative.suggestions.map((line, idx) => (
-                        <p key={`sugg-${idx}`}>{line}</p>
+                        <p key={`sugg-${idx}`}>- {line}</p>
+                      ))}
+                    </article>
+                    <article className="narrative-card">
+                      <h4>Areas for Development</h4>
+                      {executiveNarrative.development.map((line, idx) => (
+                        <p key={`dev-${idx}`}>- {line}</p>
+                      ))}
+                    </article>
+                    <article className="narrative-card">
+                      <h4>Executive Growth Actions</h4>
+                      {executiveNarrative.growthActions.map((line, idx) => (
+                        <p key={`growth-${idx}`}>- {line}</p>
+                      ))}
+                    </article>
+                    <article className="narrative-card">
+                      <h4>Business KPIs</h4>
+                      {executiveNarrative.kpis.map((line, idx) => (
+                        <p key={`kpi-${idx}`}>- {line}</p>
+                      ))}
+                    </article>
+                    <article className="narrative-card">
+                      <h4>Model KPIs</h4>
+                      {executiveNarrative.modelKpis.map((line, idx) => (
+                        <p key={`mkpi-${idx}`}>- {line}</p>
                       ))}
                     </article>
                   </div>

@@ -1,4 +1,5 @@
 import pathlib
+import html
 
 import numpy as np
 import pandas as pd
@@ -193,8 +194,189 @@ def build_prediction_form(title, form_key, X_train):
     return submitted, input_data
 
 
-st.title("Interactive Data Dashboard + Prediction")
-st.caption("From cleaned data to understandable visual insights and final prediction.")
+def build_narrative_summary(
+    df,
+    class_target,
+    reg_target,
+    class_accuracy,
+    reg_r2,
+    reg_mae,
+):
+    narrative = []
+    strengths = []
+    weaknesses = []
+    suggestions = []
+    development_areas = []
+    growth_actions = [
+        "Higher premium revenue from focused tier-up of No Membership and Basic Membership.",
+        "Lower churn by targeting low points_in_wallet customers with retention offers.",
+        "Higher monthly revenue per user by lifting low avg_transaction_value segments.",
+        "Better recurring revenue protection through weekly high-risk customer save lists.",
+        "Higher campaign ROI via monthly KPI-led budget reallocation to best-performing segments.",
+    ]
+
+    target_distribution = df[class_target].astype(str).value_counts()
+    top_label = None
+    top_share = 0.0
+    if not target_distribution.empty:
+        top_label = target_distribution.index[0]
+        top_share = target_distribution.iloc[0] / target_distribution.sum()
+
+    narrative.append(
+        f"The customer base is currently led by '{top_label}' ({top_share * 100:.1f}% of records), and the classification model is running at {class_accuracy * 100:.2f}% accuracy."
+    )
+    narrative.append(
+        f"The regression model reports R2 of {reg_r2:.3f} with MAE of {reg_mae:.3f} for {reg_target}, indicating current forecast reliability."
+    )
+
+    if class_accuracy < 0.7:
+        weaknesses.append(
+            "Classification quality is below a strong operational threshold, so class-level errors should be reviewed before production decisions."
+        )
+        suggestions.append(
+            f"Improve {class_target} prediction with feature refinement, class balancing, and hyperparameter tuning."
+        )
+    else:
+        suggestions.append(
+            f"Use the current {class_target} model for guided decision support while monitoring drift monthly."
+        )
+    strengths.append(
+        "Segment targeting enables more efficient campaign spend and stronger ROI on retention and upgrade programs."
+    )
+
+    reg_std = float(df[reg_target].std()) if reg_target in df.columns else 0.0
+    if reg_mae > reg_std:
+        weaknesses.append(
+            f"Average regression error (MAE {reg_mae:.3f}) is high relative to spread in {reg_target}, limiting precision."
+        )
+        suggestions.append(
+            f"Add stronger predictors for {reg_target} and test alternative regressors to reduce MAE."
+        )
+    else:
+        pass
+
+    if reg_r2 >= 0:
+        pass
+    else:
+        weaknesses.append(
+            f"The regression fit is weak (R2 = {reg_r2:.3f}), so predictions may not reliably track changes in {reg_target}."
+        )
+
+    if top_label is not None:
+        if top_share >= 0.45:
+            weaknesses.append(
+                f"The target '{class_target}' is concentrated in '{top_label}' ({top_share * 100:.1f}% of records), which can reduce minority-class prediction quality."
+            )
+            development_areas.append(
+                f"Improve conversion from '{top_label}' into higher-value tiers using staged offers and personalized follow-ups."
+            )
+            strengths.append(
+                f"Large concentration in '{top_label}' creates scale for conversion and upsell programs, improving premium revenue growth."
+            )
+        else:
+            strengths.append(
+                f"The '{class_target}' mix is relatively balanced, enabling consistent segment targeting and predictable campaign outcomes."
+            )
+
+    numeric_cols = df.select_dtypes(include=[np.number]).columns.tolist()
+    if len(numeric_cols) >= 2 and reg_target in numeric_cols:
+        corr = (
+            df[numeric_cols]
+            .corr(numeric_only=True)[reg_target]
+            .drop(labels=[reg_target], errors="ignore")
+        )
+        if not corr.empty:
+            strongest_driver = corr.abs().idxmax()
+            driver_value = corr[strongest_driver]
+            narrative.append(
+                f"The strongest measurable driver linked with {reg_target} is '{strongest_driver}' (correlation {driver_value:.2f})."
+            )
+            strengths.append(
+                f"Clear driver '{strongest_driver}' enables targeted offers that protect retention and lift repeat purchases."
+            )
+            suggestions.append(
+                f"Prioritize actions on '{strongest_driver}' (correlation {driver_value:.2f} with {reg_target}) in retention and upsell experiments."
+            )
+            development_areas.append(
+                f"Build feature engineering around '{strongest_driver}' and monitor its monthly impact on {reg_target}."
+            )
+
+    if not weaknesses:
+        weaknesses.append(
+            "No critical modeling weakness is immediately visible from top-line metrics; continue monitoring for drift and segment-level variance."
+        )
+    if not development_areas:
+        development_areas.append(
+            "Set up monthly segment-wise monitoring and retraining triggers for cohorts with declining prediction confidence."
+        )
+
+    return {
+        "narrative": " ".join(narrative[:3]),
+        "strengths": strengths[:3],
+        "weaknesses": weaknesses[:3],
+        "suggestions": suggestions[:3],
+        "development_areas": development_areas[:3],
+        "growth_actions": growth_actions,
+    }
+
+
+st.markdown(
+    """
+    <style>
+    .brand-header {
+        padding: 10px 0 6px 0;
+    }
+    .brand-title {
+        font-size: 3.2rem;
+        font-weight: 800;
+        letter-spacing: 0.06em;
+        margin: 0;
+        text-transform: uppercase;
+        background: linear-gradient(90deg, rgba(173, 220, 255, 0.95), rgba(142, 255, 220, 0.95));
+        -webkit-background-clip: text;
+        background-clip: text;
+        -webkit-text-fill-color: transparent;
+        text-shadow: 0 10px 24px rgba(6, 24, 40, 0.55);
+        animation: title-reveal 0.7s ease both, title-glow 2.8s ease-in-out 0.7s infinite alternate;
+    }
+    .brand-subtitle {
+        font-size: 0.92rem;
+        font-weight: 600;
+        letter-spacing: 0.16em;
+        text-transform: uppercase;
+        margin: 4px 0 0 0;
+        background: linear-gradient(90deg, rgba(173, 220, 255, 0.95), rgba(142, 255, 220, 0.95));
+        -webkit-background-clip: text;
+        background-clip: text;
+        -webkit-text-fill-color: transparent;
+        text-shadow: 0 6px 14px rgba(6, 24, 40, 0.45);
+        animation: subtitle-reveal 0.6s ease 0.2s both;
+    }
+    @keyframes title-glow {
+        from { text-shadow: 0 8px 20px rgba(10, 28, 44, 0.5); }
+        to { text-shadow: 0 12px 26px rgba(12, 46, 74, 0.8); }
+    }
+    @keyframes title-reveal {
+        from { opacity: 0; transform: translateY(12px) scale(0.98); }
+        to { opacity: 1; transform: translateY(0) scale(1); }
+    }
+    @keyframes subtitle-reveal {
+        from { opacity: 0; transform: translateY(6px); }
+        to { opacity: 1; transform: translateY(0); }
+    }
+    </style>
+    """,
+    unsafe_allow_html=True,
+)
+st.markdown(
+    """
+    <div class="brand-header">
+        <div class="brand-title">Novasight</div>
+        <div class="brand-subtitle">The Intelligence Studio</div>
+    </div>
+    """,
+    unsafe_allow_html=True,
+)
 
 st.sidebar.header("Data Input")
 uploaded_file = st.sidebar.file_uploader(
@@ -391,3 +573,116 @@ with tab3:
             title=f"Distribution of {class_target}",
         )
         st.plotly_chart(fig_dist, use_container_width=True)
+
+    st.subheader("Narrative Executive Summary")
+    st.caption("Auto-generated interpretation of current model outputs for leadership decisions.")
+    narrative = build_narrative_summary(
+        clean_df,
+        class_target,
+        reg_target,
+        class_model["accuracy"],
+        reg_model["r2"],
+        reg_model["mae"],
+    )
+
+    st.markdown(
+        """
+        <style>
+        .exec-card {
+            border: 1px solid #c9d4ea;
+            border-radius: 14px;
+            padding: 16px 18px;
+            background: #f7faff;
+            min-height: 200px;
+        }
+        .exec-card h4 {
+            margin: 0 0 8px 0;
+            color: #1f355c;
+            font-size: 1.2rem;
+        }
+        .exec-card p {
+            margin: 0;
+            color: #344868;
+            line-height: 1.55;
+        }
+        .exec-card ul {
+            margin: 0;
+            padding-left: 18px;
+            color: #344868;
+        }
+        .exec-card li {
+            margin-bottom: 6px;
+            line-height: 1.45;
+        }
+        </style>
+        """,
+        unsafe_allow_html=True,
+    )
+
+    narrative_html = html.escape(narrative["narrative"])
+    st.markdown(
+        f"""
+        <div class="exec-card" style="min-height: 120px;">
+            <h4>Executive Narrative</h4>
+            <p>{narrative_html}</p>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+    st.write("")
+
+    def _as_html_list(items):
+        return "".join(f"<li>{html.escape(item)}</li>" for item in items)
+
+    col_1, col_2 = st.columns(2)
+    with col_1:
+        st.markdown(
+            f"""
+            <div class="exec-card">
+                <h4>Strengths</h4>
+                <ul>{_as_html_list(narrative["strengths"])}</ul>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+        st.write("")
+        st.markdown(
+            f"""
+            <div class="exec-card">
+                <h4>Suggestions</h4>
+                <ul>{_as_html_list(narrative["suggestions"])}</ul>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+    with col_2:
+        st.markdown(
+            f"""
+            <div class="exec-card">
+                <h4>Weaknesses</h4>
+                <ul>{_as_html_list(narrative["weaknesses"])}</ul>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+        st.write("")
+        st.markdown(
+            f"""
+            <div class="exec-card">
+                <h4>Areas for Development</h4>
+                <ul>{_as_html_list(narrative["development_areas"])}</ul>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+
+    st.write("")
+    st.markdown(
+        f"""
+        <div class="exec-card">
+            <h4>Executive Growth Actions</h4>
+            <ul>{_as_html_list(narrative["growth_actions"])}</ul>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
